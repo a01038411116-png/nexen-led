@@ -178,18 +178,22 @@ if menu == "조명별 현황":
     st.progress(total_i / total_contract_all if total_contract_all > 0 else 0)
     st.divider()
 
+    contract_lights = master.get("contract_lights", {})
     rows = []
     for light in master["light_types"]:
+        c = contract_lights.get(light, 0)
         p = light_planned.get(light, 0)
         i = light_installed.get(light, 0)
-        r = p - i
+        remain = c - i if c > 0 else p - i
+        diff = i - c if c > 0 else 0
         rows.append({
             "조명 종류": light,
+            "계약": c if c > 0 else "-",
             "설치예정": p,
             "설치완료": i,
-            "잔여": r,
-            "진행률": f"{i/p*100:.0f}%" if p > 0 else "-",
-            "상태": "✅ 완료" if r <= 0 and p > 0 else f"잔여 {r}개" if p > 0 else "-",
+            "잔여(계약)": remain if c > 0 else "-",
+            "계약대비": f"{diff:+}" if c > 0 and i > 0 else "-",
+            "진행률": f"{i/c*100:.0f}%" if c > 0 else f"{i/p*100:.0f}%" if p > 0 else "-",
         })
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=800)
 
