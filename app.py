@@ -344,7 +344,7 @@ elif menu == "설치 입력":
                 st.error("비밀번호가 틀렸습니다.")
         st.stop()
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns([1, 1, 2])
     with col1:
         input_date = st.date_input("날짜", value=date.today())
     with col2:
@@ -353,31 +353,12 @@ elif menu == "설치 입력":
     building_areas = [a for a in areas if a["building"] == sel_building]
     area_names = [a["area"] for a in building_areas]
 
-    col3, col4 = st.columns(2)
     with col3:
         sel_area = st.selectbox("구역", area_names)
 
     area_data = next((a for a in areas if a["area"] == sel_area), None)
     if area_data:
-        sub_locs = area_data.get("sub_locations", [])
-        with col4:
-            if sub_locs:
-                sub_names = ["전체 (구역 단위)"] + [s['name'] for s in sub_locs]
-                sel_sub = st.selectbox("세부장소", sub_names)
-            else:
-                sel_sub = "전체 (구역 단위)"
-                st.selectbox("세부장소", ["세부장소 없음"], disabled=True)
-
-        # 선택된 세부장소 정보 표시
-        if sel_sub != "전체 (구역 단위)" and sub_locs:
-            idx = sub_names.index(sel_sub) - 1
-            sub_data = sub_locs[idx]
-            display_lights = sub_data["lights"]
-            st.markdown(f"**{sel_area} > {sel_sub}** | 예정: {sub_data['total']}개 | 조명 {len(display_lights)}종류")
-        else:
-            display_lights = area_data["lights"]
-            st.markdown(f"**{sel_area}** | 예정: {area_data['total']}개 | 조명 {len(display_lights)}종류")
-
+        st.markdown(f"**{sel_area}** | 예정: {area_data['total']}개 | 조명 {len(area_data['lights'])}종류")
         st.divider()
 
         # 기존 입력값
@@ -389,9 +370,9 @@ elif menu == "설치 입력":
             st.subheader(f"{sel_area} - {input_date.strftime('%m/%d')} 설치수량")
 
             inputs = {}
-            n_cols = min(3, max(1, len(display_lights)))
+            n_cols = min(3, max(1, len(area_data["lights"])))
             cols = st.columns(n_cols)
-            for i, (light, planned) in enumerate(display_lights.items()):
+            for i, (light, planned) in enumerate(area_data["lights"].items()):
                 with cols[i % n_cols]:
                     prev_val = existing.get(light, 0)
                     inputs[light] = st.number_input(
@@ -404,15 +385,9 @@ elif menu == "설치 입력":
 
             submitted = st.form_submit_button("저장", use_container_width=True, type="primary")
             if submitted:
-                # 기존 데이터에 병합 (세부장소 선택 시 기존 다른 조명 유지)
-                merged = dict(existing)
-                for k, v in inputs.items():
-                    if v > 0:
-                        merged[k] = v
-                    elif k in merged:
-                        del merged[k]
-                save_daily(input_date, sel_area, merged)
-                st.success(f"저장 완료! {sel_area} - {sum(v for v in merged.values())}개")
+                non_zero = {k: v for k, v in inputs.items() if v > 0}
+                save_daily(input_date, sel_area, non_zero)
+                st.success(f"저장 완료! {sel_area} - {sum(non_zero.values())}개")
                 st.cache_resource.clear()
                 st.rerun()
 
