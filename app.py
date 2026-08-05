@@ -166,12 +166,13 @@ if menu == "조명별 현황":
     total_i = sum(light_installed.values())
     total_contract = sum(a.get("building_contract", 0) for a in areas)
 
-    # 요약 (설치예정 기준 + 계약 기준)
+    # 요약
+    total_contract_all = 15559  # 계약 총수량
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("설치예정", f"{total_p:,}")
     col2.metric("설치완료", f"{total_i:,}")
-    col3.metric("설치예정 대비", f"{total_i/total_p*100:.1f}%" if total_p > 0 else "0%")
-    col4.metric("계약대비 증감", f"{total_p - 15559:+,}")
+    col3.metric("예정대비 진행률", f"{total_i/total_p*100:.1f}%" if total_p > 0 else "0%")
+    col4.metric("계약대비 증감", f"{total_i - total_contract_all:+,}", help="실제 설치수량 - 계약수량")
 
     st.progress(total_i / total_p if total_p > 0 else 0)
     st.divider()
@@ -228,8 +229,8 @@ elif menu == "구역별 현황":
         area_name = a["area"]
         planned = a["total"]
         contract = a.get("building_contract", 0)
-        diff = a.get("diff", planned - contract)
         installed = sum(cumul.get(area_name, {}).values())
+        diff = installed - contract  # 실제설치 - 계약
         pct = installed / planned * 100 if planned > 0 else 0
 
         if pct >= 100:
@@ -239,15 +240,15 @@ elif menu == "구역별 현황":
         else:
             icon = "⬜"
 
-        # 증감 표시
-        diff_str = f" | 증감: {diff:+}" if contract > 0 else ""
+        # 증감 표시 (실제설치 - 계약)
+        diff_str = f" | 계약대비: {diff:+}" if contract > 0 and installed > 0 else ""
         label = f"{icon} {a['building']} | {area_name} — {installed}/{planned} ({pct:.0f}%){diff_str}"
 
         with st.expander(label):
             st.progress(min(pct / 100, 1.0))
 
             if contract > 0:
-                st.caption(f"계약: {contract} → 설치예정: {planned} (증감: {diff:+})")
+                st.caption(f"계약: {contract} | 설치예정: {planned} | 실제설치: {installed} | 계약대비: {diff:+}")
 
             light_rows = []
             for light, light_planned_qty in a["lights"].items():
