@@ -321,7 +321,7 @@ elif menu == "일별 리포트":
 elif menu == "설치 입력":
     st.title("설치 수량 입력")
 
-    col1, col2, col3 = st.columns([1, 1, 2])
+    col1, col2 = st.columns(2)
     with col1:
         input_date = st.date_input("날짜", value=date.today())
     with col2:
@@ -330,26 +330,35 @@ elif menu == "설치 입력":
     building_areas = [a for a in areas if a["building"] == sel_building]
     area_names = [a["area"] for a in building_areas]
 
+    col3, col4 = st.columns(2)
     with col3:
         sel_area = st.selectbox("구역", area_names)
 
     area_data = next((a for a in areas if a["area"] == sel_area), None)
     if area_data:
-        # 세부장소 선택 (있으면)
         sub_locs = area_data.get("sub_locations", [])
-        if sub_locs:
-            sub_names = ["전체 (구역 단위)"] + [f"{s['name']} ({s['total']}개)" for s in sub_locs]
-            sel_sub = st.selectbox("세부장소", sub_names)
+        with col4:
+            if sub_locs:
+                sub_names = ["전체 (구역 단위)"] + [s['name'] for s in sub_locs]
+                sel_sub = st.selectbox("세부장소", sub_names)
+            else:
+                sel_sub = "전체 (구역 단위)"
+                st.selectbox("세부장소", ["세부장소 없음"], disabled=True)
+
+        # 선택된 세부장소 정보 표시
+        if sel_sub != "전체 (구역 단위)" and sub_locs:
+            idx = sub_names.index(sel_sub) - 1
+            sub_data = sub_locs[idx]
+            display_lights = sub_data["lights"]
+            st.markdown(f"**{sel_area} > {sel_sub}** | 예정: {sub_data['total']}개 | 조명 {len(display_lights)}종류")
         else:
-            sel_sub = "전체 (구역 단위)"
+            display_lights = area_data["lights"]
+            st.markdown(f"**{sel_area}** | 예정: {area_data['total']}개 | 조명 {len(display_lights)}종류")
 
-        st.markdown(f"**예정수량: {area_data['total']}개** | 조명 {len(area_data['lights'])}종류")
-
-        # 계약 정보 표시
+        # 계약 정보
         contract = area_data.get("building_contract", 0)
-        diff = area_data.get("diff", 0)
         if contract > 0:
-            st.caption(f"건물 계약수량: {contract:,} | 증감: {diff:+}")
+            st.caption(f"건물 계약수량: {contract:,}")
 
         st.divider()
 
@@ -357,13 +366,6 @@ elif menu == "설치 입력":
         all_data = load_all_data()
         dt_str = input_date.isoformat()
         existing = all_data.get(dt_str, {}).get(sel_area, {})
-
-        # 표시할 조명 결정
-        if sel_sub != "전체 (구역 단위)" and sub_locs:
-            idx = sub_names.index(sel_sub) - 1
-            display_lights = sub_locs[idx]["lights"]
-        else:
-            display_lights = area_data["lights"]
 
         with st.form("install_form"):
             st.subheader(f"{sel_area} - {input_date.strftime('%m/%d')} 설치수량")
