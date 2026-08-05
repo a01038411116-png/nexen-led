@@ -7,17 +7,17 @@ from collections import defaultdict
 import gspread
 from google.oauth2.service_account import Credentials
 
-# 페이지 설정
 st.set_page_config(
     page_title="냐하하핫",
     page_icon="😸",
     layout="wide",
 )
 
-# ========== 비밀번호 로그인 ==========
+# ========== 비밀번호 로그인 (관리자/방문자) ==========
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
+        st.session_state.user_role = None
     if st.session_state.authenticated:
         return True
 
@@ -25,11 +25,18 @@ def check_password():
     password = st.text_input("비밀번호를 입력하세요", type="password")
     if st.button("로그인", type="primary"):
         try:
-            correct = st.secrets["password"]
+            admin_pw = st.secrets["admin_password"]
+            viewer_pw = st.secrets["viewer_password"]
         except Exception:
-            correct = "nexen2026"
-        if password == correct:
+            admin_pw = "4572"
+            viewer_pw = "1116"
+        if password == admin_pw:
             st.session_state.authenticated = True
+            st.session_state.user_role = "admin"
+            st.rerun()
+        elif password == viewer_pw:
+            st.session_state.authenticated = True
+            st.session_state.user_role = "viewer"
             st.rerun()
         else:
             st.error("비밀번호가 틀렸습니다.")
@@ -37,6 +44,8 @@ def check_password():
 
 if not check_password():
     st.stop()
+
+is_admin = st.session_state.get("user_role") == "admin"
 
 # ========== Google Sheets 연결 ==========
 SHEET_ID = "1yoDDNRkQGbFvdGA-gDXoqHC6Y84VRlx6jmai6-Y8Ojo"
@@ -63,9 +72,7 @@ def get_worksheet():
         ws.update(values=[["날짜", "구역", "조명", "수량"]], range_name="A1")
     return ws
 
-# ========== 데이터 읽기/쓰기 (Google Sheets) ==========
 def load_all_data() -> dict:
-    """Google Sheets에서 전체 데이터 로드 → {날짜: {구역: {조명: 수량}}}"""
     ws = get_worksheet()
     rows = ws.get_all_records()
     all_data = {}
@@ -82,30 +89,18 @@ def load_all_data() -> dict:
             all_data[dt][area][light] = qty
     return all_data
 
-def save_daily(dt: date, area: str, lights: dict):
-    """해당 날짜+구역의 데이터를 Google Sheets에 저장 (기존 삭제 후 추가)"""
+def save_daily(dt, area, lights):
     ws = get_worksheet()
     dt_str = dt.isoformat()
-
-    # 기존 데이터에서 해당 날짜+구역 행 찾아서 삭제
     all_rows = ws.get_all_values()
     rows_to_delete = []
     for i, row in enumerate(all_rows):
-        if i == 0:
-            continue  # 헤더
+        if i == 0: continue
         if len(row) >= 2 and row[0] == dt_str and row[1] == area:
-            rows_to_delete.append(i + 1)  # 1-indexed
-
-    # 뒤에서부터 삭제 (인덱스 밀림 방지)
+            rows_to_delete.append(i + 1)
     for row_idx in reversed(rows_to_delete):
         ws.delete_rows(row_idx)
-
-    # 새 데이터 추가
-    new_rows = []
-    for light, qty in lights.items():
-        if qty > 0:
-            new_rows.append([dt_str, area, light, qty])
-
+    new_rows = [[dt_str, area, light, qty] for light, qty in lights.items() if qty > 0]
     if new_rows:
         ws.append_rows(new_rows)
 
@@ -117,7 +112,7 @@ def load_master():
     with open(MASTER_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def calc_cumulative(all_data: dict) -> dict:
+def calc_cumulative(all_data):
     cumul = {}
     for dt_str, daily in sorted(all_data.items()):
         for area, lights in daily.items():
@@ -127,146 +122,35 @@ def calc_cumulative(all_data: dict) -> dict:
                 cumul[area][light] = cumul[area].get(light, 0) + qty
     return cumul
 
-# ========== 메인 앱 ==========
+# ========== 메인 ==========
 master = load_master()
 areas = master["areas"]
 buildings = sorted(set(a["building"] for a in areas))
+contract_by_building = master.get("contract_by_building", {})
 
 st.sidebar.title("냐하하핫")
-menu = st.sidebar.radio("메뉴", ["설치 입력", "구역별 현황", "조명별 현황", "일별 리포트"])
+if is_admin:
+    st.sidebar.caption("🔑 관리자 모드")
+else:
+    st.sidebar.caption("👁 열람 모드")
+
+if is_admin:
+    menu = st.sidebar.radio("메뉴", ["조명별 현황", "구역별 현황", "일별 리포트", "설치 입력"])
+else:
+    menu = st.sidebar.radio("메뉴", ["조명별 현황", "구역별 현황", "일별 리포트"])
+
+import pandas as pd
 
 # ==========================================
-# 1. 설치 입력
+# 조명별 현황 (첫 화면)
 # ==========================================
-if menu == "설치 입력":
-    st.title("설치 수량 입력")
-
-    col1, col2, col3 = st.columns([1, 1, 2])
-    with col1:
-        input_date = st.date_input("날짜", value=date.today())
-    with col2:
-        sel_building = st.selectbox("건물", buildings)
-
-    building_areas = [a for a in areas if a["building"] == sel_building]
-    area_names = [a["area"] for a in building_areas]
-
-    with col3:
-        sel_area = st.selectbox("구역", area_names)
-
-    area_data = next((a for a in areas if a["area"] == sel_area), None)
-    if area_data:
-        st.markdown(f"**예정수량: {area_data['total']}개** | 조명 {len(area_data['lights'])}종류")
-        st.divider()
-
-        # 기존 입력값 로드
-        all_data = load_all_data()
-        dt_str = input_date.isoformat()
-        existing = all_data.get(dt_str, {}).get(sel_area, {})
-
-        with st.form("install_form"):
-            st.subheader(f"{sel_area} - {input_date.strftime('%m/%d')} 설치수량")
-
-            inputs = {}
-            cols = st.columns(min(3, len(area_data["lights"])))
-            for i, (light, planned) in enumerate(area_data["lights"].items()):
-                with cols[i % len(cols)]:
-                    prev_val = existing.get(light, 0)
-                    inputs[light] = st.number_input(
-                        f"{light}\n(예정: {planned})",
-                        min_value=0,
-                        value=prev_val,
-                        step=1,
-                        key=f"input_{light}",
-                    )
-
-            submitted = st.form_submit_button("저장", use_container_width=True, type="primary")
-            if submitted:
-                non_zero = {k: v for k, v in inputs.items() if v > 0}
-                save_daily(input_date, sel_area, non_zero)
-                st.success(f"저장 완료! {sel_area} - {sum(non_zero.values())}개")
-                st.cache_resource.clear()
-                st.rerun()
-
-        # 오늘 입력 현황
-        today_data = all_data.get(dt_str, {})
-        if today_data:
-            st.divider()
-            st.subheader(f"{input_date.strftime('%m/%d')} 입력 현황")
-            total_today = 0
-            for area_name, lights in today_data.items():
-                area_total = sum(lights.values())
-                total_today += area_total
-                with st.expander(f"{area_name} - {area_total}개"):
-                    for light, qty in lights.items():
-                        st.write(f"  {light}: {qty}개")
-            st.metric("오늘 총 설치", f"{total_today}개")
-
-# ==========================================
-# 2. 구역별 현황
-# ==========================================
-elif menu == "구역별 현황":
-    st.title("구역별 설치현황")
-
-    all_data = load_all_data()
-    cumul = calc_cumulative(all_data)
-
-    filter_building = st.selectbox("건물 필터", ["전체"] + buildings)
-    filtered = areas if filter_building == "전체" else [a for a in areas if a["building"] == filter_building]
-
-    total_planned = sum(a["total"] for a in filtered)
-    total_installed = 0
-    for a in filtered:
-        if a["area"] in cumul:
-            total_installed += sum(cumul[a["area"]].values())
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("예정수량", f"{total_planned:,}")
-    col2.metric("설치완료", f"{total_installed:,}")
-    col3.metric("진행률", f"{total_installed/total_planned*100:.1f}%" if total_planned > 0 else "0%")
-
-    st.progress(total_installed / total_planned if total_planned > 0 else 0)
-    st.divider()
-
-    for a in filtered:
-        area_name = a["area"]
-        planned = a["total"]
-        installed = sum(cumul.get(area_name, {}).values())
-        pct = installed / planned * 100 if planned > 0 else 0
-
-        if pct >= 100:
-            icon = "✅"
-        elif pct > 0:
-            icon = "🔧"
-        else:
-            icon = "⬜"
-
-        with st.expander(f"{icon} {a['building']} | {area_name} — {installed}/{planned} ({pct:.0f}%)"):
-            st.progress(min(pct / 100, 1.0))
-
-            import pandas as pd
-            light_rows = []
-            for light, light_planned in a["lights"].items():
-                light_installed = cumul.get(area_name, {}).get(light, 0)
-                light_rows.append({
-                    "조명": light,
-                    "예정": light_planned,
-                    "설치": light_installed,
-                    "잔여": light_planned - light_installed,
-                    "진행률": f"{light_installed/light_planned*100:.0f}%" if light_planned > 0 else "-",
-                })
-            if light_rows:
-                st.dataframe(pd.DataFrame(light_rows), use_container_width=True, hide_index=True)
-
-# ==========================================
-# 3. 조명별 현황
-# ==========================================
-elif menu == "조명별 현황":
+if menu == "조명별 현황":
     st.title("조명 종류별 설치현황")
-    st.caption("발주/자재 관리용")
 
     all_data = load_all_data()
 
     light_planned = defaultdict(int)
+    light_contract = defaultdict(int)
     light_installed = defaultdict(int)
 
     for a in areas:
@@ -280,16 +164,18 @@ elif menu == "조명별 현황":
 
     total_p = sum(light_planned.values())
     total_i = sum(light_installed.values())
+    total_contract = sum(a.get("building_contract", 0) for a in areas)
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("총 예정", f"{total_p:,}")
-    col2.metric("총 설치", f"{total_i:,}")
-    col3.metric("진행률", f"{total_i/total_p*100:.1f}%" if total_p > 0 else "0%")
+    # 요약 (설치예정 기준 + 계약 기준)
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("설치예정", f"{total_p:,}")
+    col2.metric("설치완료", f"{total_i:,}")
+    col3.metric("설치예정 대비", f"{total_i/total_p*100:.1f}%" if total_p > 0 else "0%")
+    col4.metric("계약대비 증감", f"{total_p - 15559:+,}")
 
     st.progress(total_i / total_p if total_p > 0 else 0)
     st.divider()
 
-    import pandas as pd
     rows = []
     for light in master["light_types"]:
         p = light_planned.get(light, 0)
@@ -297,8 +183,8 @@ elif menu == "조명별 현황":
         r = p - i
         rows.append({
             "조명 종류": light,
-            "예정": p,
-            "설치": i,
+            "설치예정": p,
+            "설치완료": i,
             "잔여": r,
             "진행률": f"{i/p*100:.0f}%" if p > 0 else "-",
             "상태": "✅ 완료" if r <= 0 and p > 0 else f"잔여 {r}개" if p > 0 else "-",
@@ -306,7 +192,78 @@ elif menu == "조명별 현황":
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=800)
 
 # ==========================================
-# 4. 일별 리포트
+# 구역별 현황
+# ==========================================
+elif menu == "구역별 현황":
+    st.title("구역별 설치현황")
+
+    all_data = load_all_data()
+    cumul = calc_cumulative(all_data)
+
+    filter_building = st.selectbox("건물 필터", ["전체"] + buildings)
+    filtered = areas if filter_building == "전체" else [a for a in areas if a["building"] == filter_building]
+
+    total_planned = sum(a["total"] for a in filtered)
+    total_installed = sum(sum(cumul.get(a["area"], {}).values()) for a in filtered)
+
+    # 건물별 계약수량 합산 (중복 제거)
+    bldg_set = set()
+    total_contract_filtered = 0
+    for a in filtered:
+        b = a["building"]
+        if b not in bldg_set:
+            bldg_set.add(b)
+            total_contract_filtered += a.get("building_contract", 0)
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("설치예정", f"{total_planned:,}")
+    col2.metric("설치완료", f"{total_installed:,}")
+    col3.metric("예정대비 진행률", f"{total_installed/total_planned*100:.1f}%" if total_planned > 0 else "0%")
+    col4.metric("계약대비 진행률", f"{total_installed/total_contract_filtered*100:.1f}%" if total_contract_filtered > 0 else "-")
+
+    st.progress(total_installed / total_planned if total_planned > 0 else 0)
+    st.divider()
+
+    for a in filtered:
+        area_name = a["area"]
+        planned = a["total"]
+        contract = a.get("building_contract", 0)
+        diff = a.get("diff", planned - contract)
+        installed = sum(cumul.get(area_name, {}).values())
+        pct = installed / planned * 100 if planned > 0 else 0
+
+        if pct >= 100:
+            icon = "✅"
+        elif pct > 0:
+            icon = "🔧"
+        else:
+            icon = "⬜"
+
+        # 증감 표시
+        diff_str = f" | 증감: {diff:+}" if contract > 0 else ""
+        label = f"{icon} {a['building']} | {area_name} — {installed}/{planned} ({pct:.0f}%){diff_str}"
+
+        with st.expander(label):
+            st.progress(min(pct / 100, 1.0))
+
+            if contract > 0:
+                st.caption(f"계약: {contract} → 설치예정: {planned} (증감: {diff:+})")
+
+            light_rows = []
+            for light, light_planned_qty in a["lights"].items():
+                light_installed = cumul.get(area_name, {}).get(light, 0)
+                light_rows.append({
+                    "조명": light,
+                    "예정": light_planned_qty,
+                    "설치": light_installed,
+                    "잔여": light_planned_qty - light_installed,
+                    "진행률": f"{light_installed/light_planned_qty*100:.0f}%" if light_planned_qty > 0 else "-",
+                })
+            if light_rows:
+                st.dataframe(pd.DataFrame(light_rows), use_container_width=True, hide_index=True)
+
+# ==========================================
+# 일별 리포트
 # ==========================================
 elif menu == "일별 리포트":
     st.title("일별 설치 리포트")
@@ -314,10 +271,8 @@ elif menu == "일별 리포트":
     all_data = load_all_data()
 
     if not all_data:
-        st.info("아직 입력된 데이터가 없습니다. '설치 입력'에서 데이터를 입력해주세요.")
+        st.info("아직 입력된 데이터가 없습니다.")
     else:
-        import pandas as pd
-
         cumul_total = 0
         total_planned = sum(a["total"] for a in areas)
 
@@ -340,7 +295,6 @@ elif menu == "일별 리포트":
         if len(rows) > 1:
             chart_df = pd.DataFrame(rows)
             chart_df["날짜"] = pd.to_datetime(chart_df["날짜"])
-
             col1, col2 = st.columns(2)
             with col1:
                 st.subheader("일별 설치수량")
@@ -359,3 +313,98 @@ elif menu == "일별 리포트":
                 with st.expander(f"{area_name} - {area_total}개"):
                     for light, qty in lights.items():
                         st.write(f"  {light}: {qty}개")
+
+# ==========================================
+# 설치 입력 (관리자만)
+# ==========================================
+elif menu == "설치 입력":
+    st.title("설치 수량 입력")
+
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        input_date = st.date_input("날짜", value=date.today())
+    with col2:
+        sel_building = st.selectbox("건물", buildings)
+
+    building_areas = [a for a in areas if a["building"] == sel_building]
+    area_names = [a["area"] for a in building_areas]
+
+    with col3:
+        sel_area = st.selectbox("구역", area_names)
+
+    area_data = next((a for a in areas if a["area"] == sel_area), None)
+    if area_data:
+        # 세부장소 선택 (있으면)
+        sub_locs = area_data.get("sub_locations", [])
+        if sub_locs:
+            sub_names = ["전체 (구역 단위)"] + [f"{s['name']} ({s['total']}개)" for s in sub_locs]
+            sel_sub = st.selectbox("세부장소", sub_names)
+        else:
+            sel_sub = "전체 (구역 단위)"
+
+        st.markdown(f"**예정수량: {area_data['total']}개** | 조명 {len(area_data['lights'])}종류")
+
+        # 계약 정보 표시
+        contract = area_data.get("building_contract", 0)
+        diff = area_data.get("diff", 0)
+        if contract > 0:
+            st.caption(f"건물 계약수량: {contract:,} | 증감: {diff:+}")
+
+        st.divider()
+
+        # 기존 입력값
+        all_data = load_all_data()
+        dt_str = input_date.isoformat()
+        existing = all_data.get(dt_str, {}).get(sel_area, {})
+
+        # 표시할 조명 결정
+        if sel_sub != "전체 (구역 단위)" and sub_locs:
+            idx = sub_names.index(sel_sub) - 1
+            display_lights = sub_locs[idx]["lights"]
+        else:
+            display_lights = area_data["lights"]
+
+        with st.form("install_form"):
+            st.subheader(f"{sel_area} - {input_date.strftime('%m/%d')} 설치수량")
+
+            inputs = {}
+            n_cols = min(3, max(1, len(display_lights)))
+            cols = st.columns(n_cols)
+            for i, (light, planned) in enumerate(display_lights.items()):
+                with cols[i % n_cols]:
+                    prev_val = existing.get(light, 0)
+                    inputs[light] = st.number_input(
+                        f"{light}\n(예정: {planned})",
+                        min_value=0,
+                        value=prev_val,
+                        step=1,
+                        key=f"input_{light}",
+                    )
+
+            submitted = st.form_submit_button("저장", use_container_width=True, type="primary")
+            if submitted:
+                # 기존 데이터에 병합 (세부장소 선택 시 기존 다른 조명 유지)
+                merged = dict(existing)
+                for k, v in inputs.items():
+                    if v > 0:
+                        merged[k] = v
+                    elif k in merged:
+                        del merged[k]
+                save_daily(input_date, sel_area, merged)
+                st.success(f"저장 완료! {sel_area} - {sum(v for v in merged.values())}개")
+                st.cache_resource.clear()
+                st.rerun()
+
+        # 당일 입력 현황
+        today_data = all_data.get(dt_str, {})
+        if today_data:
+            st.divider()
+            st.subheader(f"{input_date.strftime('%m/%d')} 입력 현황")
+            total_today = 0
+            for area_name, lights in today_data.items():
+                area_total = sum(lights.values())
+                total_today += area_total
+                with st.expander(f"{area_name} - {area_total}개"):
+                    for light, qty in lights.items():
+                        st.write(f"  {light}: {qty}개")
+            st.metric("오늘 총 설치", f"{total_today}개")
