@@ -14,11 +14,10 @@ st.set_page_config(
     layout="wide",
 )
 
-# ========== 비밀번호 로그인 (관리자/방문자) ==========
+# ========== 비밀번호 로그인 ==========
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
-        st.session_state.user_role = None
     if st.session_state.authenticated:
         return True
 
@@ -26,18 +25,11 @@ def check_password():
     password = st.text_input("비밀번호를 입력하세요", type="password")
     if st.button("로그인", type="primary"):
         try:
-            admin_pw = st.secrets["admin_password"]
-            viewer_pw = st.secrets["viewer_password"]
+            correct = st.secrets["password"]
         except Exception:
-            admin_pw = "4572"
-            viewer_pw = "1116"
-        if password == admin_pw:
+            correct = "1116"
+        if password == correct:
             st.session_state.authenticated = True
-            st.session_state.user_role = "admin"
-            st.rerun()
-        elif password == viewer_pw:
-            st.session_state.authenticated = True
-            st.session_state.user_role = "viewer"
             st.rerun()
         else:
             st.error("비밀번호가 틀렸습니다.")
@@ -45,8 +37,6 @@ def check_password():
 
 if not check_password():
     st.stop()
-
-is_admin = st.session_state.get("user_role") == "admin"
 
 # ========== Google Sheets 연결 ==========
 SHEET_ID = "1yoDDNRkQGbFvdGA-gDXoqHC6Y84VRlx6jmai6-Y8Ojo"
@@ -129,15 +119,7 @@ buildings = sorted(set(a["building"] for a in areas))
 
 
 st.sidebar.title("넥센 LED 설치관리")
-if is_admin:
-    st.sidebar.caption("🔑 관리자 모드")
-else:
-    st.sidebar.caption("👁 열람 모드")
-
-if is_admin:
-    menu = st.sidebar.radio("메뉴", ["조명별 현황", "구역별 현황", "일별 리포트", "설치 입력"])
-else:
-    menu = st.sidebar.radio("메뉴", ["조명별 현황", "구역별 현황", "일별 리포트"])
+menu = st.sidebar.radio("메뉴", ["조명별 현황", "구역별 현황", "일별 리포트", "설치 입력"])
 
 import pandas as pd
 
@@ -343,6 +325,24 @@ elif menu == "일별 리포트":
 # ==========================================
 elif menu == "설치 입력":
     st.title("설치 수량 입력")
+
+    # 관리자 비밀번호 확인
+    if "install_unlocked" not in st.session_state:
+        st.session_state.install_unlocked = False
+
+    if not st.session_state.install_unlocked:
+        admin_pw_input = st.text_input("관리자 비밀번호", type="password")
+        if st.button("잠금 해제", type="primary"):
+            try:
+                correct = st.secrets["admin_password"]
+            except Exception:
+                correct = "4572"
+            if admin_pw_input == correct:
+                st.session_state.install_unlocked = True
+                st.rerun()
+            else:
+                st.error("비밀번호가 틀렸습니다.")
+        st.stop()
 
     col1, col2 = st.columns(2)
     with col1:
