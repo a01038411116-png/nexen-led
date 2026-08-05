@@ -126,7 +126,7 @@ def calc_cumulative(all_data):
 master = load_master()
 areas = master["areas"]
 buildings = sorted(set(a["building"] for a in areas))
-contract_by_building = master.get("contract_by_building", {})
+
 
 st.sidebar.title("넥센 LED 설치관리")
 if is_admin:
@@ -164,8 +164,6 @@ if menu == "조명별 현황":
 
     total_p = sum(light_planned.values())
     total_i = sum(light_installed.values())
-    total_contract = sum(a.get("building_contract", 0) for a in areas)
-
     # 요약
     total_contract_all = 15559  # 계약 총수량
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -379,11 +377,6 @@ elif menu == "설치 입력":
         else:
             display_lights = area_data["lights"]
             st.markdown(f"**{sel_area}** | 예정: {area_data['total']}개 | 조명 {len(display_lights)}종류")
-
-        # 계약 정보
-        contract = area_data.get("building_contract", 0)
-        if contract > 0:
-            st.caption(f"건물 계약수량: {contract:,}")
 
         st.divider()
 
