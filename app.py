@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import os
+import io
 from datetime import datetime, date
 from pathlib import Path
 from collections import defaultdict
@@ -194,7 +195,12 @@ if menu == "조명별 현황":
             "계약대비": f"{diff:+}" if c > 0 and i > 0 else "-",
             "진행률": f"{i/c*100:.0f}%" if c > 0 else f"{i/p*100:.0f}%" if p > 0 else "-",
         })
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=800)
+    df_light = pd.DataFrame(rows)
+    st.dataframe(df_light, use_container_width=True, hide_index=True, height=800)
+
+    buf = io.BytesIO()
+    df_light.to_excel(buf, index=False, sheet_name="조명별현황")
+    st.download_button("📥 엑셀 다운로드", buf.getvalue(), file_name="조명별현황.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 # ==========================================
 # 구역별 현황
@@ -228,6 +234,27 @@ elif menu == "구역별 현황":
     col5.metric("계약대비 증감", f"{total_installed - total_contract_filtered:+,}" if total_contract_filtered > 0 else "-")
 
     st.progress(total_installed / total_contract_filtered if total_contract_filtered > 0 else 0)
+
+    # 구역별 엑셀 다운로드
+    area_export_rows = []
+    for a in filtered:
+        an = a["area"]
+        inst = sum(cumul.get(an, {}).values())
+        ct = a.get("building_contract", 0)
+        area_export_rows.append({
+            "건물": a["building"],
+            "구역": an,
+            "계약수량(건물)": ct,
+            "설치예정": a["total"],
+            "설치완료": inst,
+            "잔여": a["total"] - inst,
+            "진행률": f"{inst/a['total']*100:.0f}%" if a["total"] > 0 else "-",
+        })
+    df_area = pd.DataFrame(area_export_rows)
+    buf2 = io.BytesIO()
+    df_area.to_excel(buf2, index=False, sheet_name="구역별현황")
+    st.download_button("📥 엑셀 다운로드", buf2.getvalue(), file_name="구역별현황.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
     st.divider()
 
     for a in filtered:
@@ -304,7 +331,12 @@ elif menu == "일별 리포트":
                 "잔여(계약)": total_contract_all - cumul_total,
             })
 
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        df_daily = pd.DataFrame(rows)
+        st.dataframe(df_daily, use_container_width=True, hide_index=True)
+
+        buf3 = io.BytesIO()
+        df_daily.to_excel(buf3, index=False, sheet_name="일별리포트")
+        st.download_button("📥 엑셀 다운로드", buf3.getvalue(), file_name="일별리포트.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
         if len(rows) > 1:
             chart_df = pd.DataFrame(rows)
