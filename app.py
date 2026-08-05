@@ -171,9 +171,8 @@ if menu == "조명별 현황":
             "계약수량": c if c > 0 else "-",
             "설치예정": p,
             "설치완료": i,
-            "잔여(계약)": remain if c > 0 else "-",
-            "계약대비": f"{diff:+}" if c > 0 and i > 0 else "-",
-            "진행률": f"{i/c*100:.0f}%" if c > 0 else f"{i/p*100:.0f}%" if p > 0 else "-",
+            "잔여(계약대비)": remain if c > 0 else "-",
+            "진행률(계약대비)": f"{i/c*100:.0f}%" if c > 0 else f"{i/p*100:.0f}%" if p > 0 else "-",
         })
     df_light = pd.DataFrame(rows)
     st.dataframe(df_light, use_container_width=True, hide_index=True, height=800)
