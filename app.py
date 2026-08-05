@@ -7,8 +7,8 @@ from collections import defaultdict
 
 # 페이지 설정
 st.set_page_config(
-    page_title="넥센 LED 설치현황",
-    page_icon="💡",
+    page_title="냐하하핫",
+    page_icon="😸",
     layout="wide",
 )
 
@@ -21,7 +21,7 @@ def check_password():
     if st.session_state.authenticated:
         return True
 
-    st.title("🔒 넥센 LED 설치관리 시스템")
+    st.title("🔒 냐하하핫")
     password = st.text_input("비밀번호를 입력하세요", type="password")
     if st.button("로그인", type="primary"):
         # 비밀번호: Streamlit secrets 또는 기본값
@@ -96,7 +96,7 @@ areas = master["areas"]
 buildings = sorted(set(a["building"] for a in areas))
 
 # 사이드바
-st.sidebar.title("넥센 LED 설치관리")
+st.sidebar.title("냐하하핫")
 menu = st.sidebar.radio("메뉴", ["설치 입력", "구역별 현황", "조명별 현황", "일별 리포트"])
 
 # ==========================================
