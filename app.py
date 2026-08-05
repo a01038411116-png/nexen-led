@@ -188,7 +188,7 @@ if menu == "조명별 현황":
         diff = i - c if c > 0 else 0
         rows.append({
             "조명 종류": light,
-            "계약": c if c > 0 else "-",
+            "계약수량": c if c > 0 else "-",
             "설치예정": p,
             "설치완료": i,
             "잔여(계약)": remain if c > 0 else "-",
