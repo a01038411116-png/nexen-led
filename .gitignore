@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+install_data/
+~$*
+*_backup.xlsx
+.streamlit/secrets.toml
