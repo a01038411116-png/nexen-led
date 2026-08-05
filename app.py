@@ -8,7 +8,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 st.set_page_config(
-    page_title="냐하하핫",
+    page_title="넥센 LED 설치관리",
     page_icon="😸",
     layout="wide",
 )
@@ -21,7 +21,7 @@ def check_password():
     if st.session_state.authenticated:
         return True
 
-    st.title("🔒 냐하하핫")
+    st.title("🔒 넥센타이어 LED 설치관리")
     password = st.text_input("비밀번호를 입력하세요", type="password")
     if st.button("로그인", type="primary"):
         try:
@@ -128,7 +128,7 @@ areas = master["areas"]
 buildings = sorted(set(a["building"] for a in areas))
 contract_by_building = master.get("contract_by_building", {})
 
-st.sidebar.title("냐하하핫")
+st.sidebar.title("넥센 LED 설치관리")
 if is_admin:
     st.sidebar.caption("🔑 관리자 모드")
 else:
