@@ -168,13 +168,14 @@ if menu == "조명별 현황":
 
     # 요약
     total_contract_all = 15559  # 계약 총수량
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("설치예정", f"{total_p:,}")
-    col2.metric("설치완료", f"{total_i:,}")
-    col3.metric("예정대비 진행률", f"{total_i/total_p*100:.1f}%" if total_p > 0 else "0%")
-    col4.metric("계약대비 증감", f"{total_i - total_contract_all:+,}", help="실제 설치수량 - 계약수량")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("계약수량", f"{total_contract_all:,}")
+    col2.metric("설치예정", f"{total_p:,}")
+    col3.metric("설치완료", f"{total_i:,}")
+    col4.metric("계약대비 진행률", f"{total_i/total_contract_all*100:.1f}%" if total_contract_all > 0 else "0%")
+    col5.metric("계약대비 증감", f"{total_i - total_contract_all:+,}")
 
-    st.progress(total_i / total_p if total_p > 0 else 0)
+    st.progress(total_i / total_contract_all if total_contract_all > 0 else 0)
     st.divider()
 
     rows = []
@@ -216,13 +217,14 @@ elif menu == "구역별 현황":
             bldg_set.add(b)
             total_contract_filtered += a.get("building_contract", 0)
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("설치예정", f"{total_planned:,}")
-    col2.metric("설치완료", f"{total_installed:,}")
-    col3.metric("예정대비 진행률", f"{total_installed/total_planned*100:.1f}%" if total_planned > 0 else "0%")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("계약수량", f"{total_contract_filtered:,}")
+    col2.metric("설치예정", f"{total_planned:,}")
+    col3.metric("설치완료", f"{total_installed:,}")
     col4.metric("계약대비 진행률", f"{total_installed/total_contract_filtered*100:.1f}%" if total_contract_filtered > 0 else "-")
+    col5.metric("계약대비 증감", f"{total_installed - total_contract_filtered:+,}" if total_contract_filtered > 0 else "-")
 
-    st.progress(total_installed / total_planned if total_planned > 0 else 0)
+    st.progress(total_installed / total_contract_filtered if total_contract_filtered > 0 else 0)
     st.divider()
 
     for a in filtered:
@@ -276,6 +278,14 @@ elif menu == "일별 리포트":
     else:
         cumul_total = 0
         total_planned = sum(a["total"] for a in areas)
+        total_contract_all = 15559
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("계약수량", f"{total_contract_all:,}")
+        col2.metric("설치예정", f"{total_planned:,}")
+        all_installed = sum(sum(lights.values()) for daily in all_data.values() for lights in daily.values())
+        col3.metric("계약대비 진행률", f"{all_installed/total_contract_all*100:.1f}%" if total_contract_all > 0 else "0%")
+        st.divider()
 
         rows = []
         for dt_str in sorted(all_data.keys()):
@@ -287,8 +297,8 @@ elif menu == "일별 리포트":
                 "작업구역수": len(daily),
                 "당일설치": day_total,
                 "누적설치": cumul_total,
-                "진행률": f"{cumul_total/total_planned*100:.1f}%",
-                "잔여": total_planned - cumul_total,
+                "계약대비": f"{cumul_total/total_contract_all*100:.1f}%",
+                "잔여(계약)": total_contract_all - cumul_total,
             })
 
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
