@@ -217,34 +217,21 @@ elif menu == "구역별 현황":
     total_planned = sum(a["total"] for a in filtered)
     total_installed = sum(sum(cumul.get(a["area"], {}).values()) for a in filtered)
 
-    # 건물별 계약수량 합산 (중복 제거)
-    bldg_set = set()
-    total_contract_filtered = 0
-    for a in filtered:
-        b = a["building"]
-        if b not in bldg_set:
-            bldg_set.add(b)
-            total_contract_filtered += a.get("building_contract", 0)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("설치예정", f"{total_planned:,}")
+    col2.metric("설치완료", f"{total_installed:,}")
+    col3.metric("진행률", f"{total_installed/total_planned*100:.1f}%" if total_planned > 0 else "0%")
 
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("계약수량", f"{total_contract_filtered:,}")
-    col2.metric("설치예정", f"{total_planned:,}")
-    col3.metric("설치완료", f"{total_installed:,}")
-    col4.metric("계약대비 진행률", f"{total_installed/total_contract_filtered*100:.1f}%" if total_contract_filtered > 0 else "-")
-    col5.metric("계약대비 증감", f"{total_installed - total_contract_filtered:+,}" if total_contract_filtered > 0 else "-")
-
-    st.progress(total_installed / total_contract_filtered if total_contract_filtered > 0 else 0)
+    st.progress(total_installed / total_planned if total_planned > 0 else 0)
 
     # 구역별 엑셀 다운로드
     area_export_rows = []
     for a in filtered:
         an = a["area"]
         inst = sum(cumul.get(an, {}).values())
-        ct = a.get("building_contract", 0)
         area_export_rows.append({
             "건물": a["building"],
             "구역": an,
-            "계약수량(건물)": ct,
             "설치예정": a["total"],
             "설치완료": inst,
             "잔여": a["total"] - inst,
@@ -260,9 +247,7 @@ elif menu == "구역별 현황":
     for a in filtered:
         area_name = a["area"]
         planned = a["total"]
-        contract = a.get("building_contract", 0)
         installed = sum(cumul.get(area_name, {}).values())
-        diff = installed - contract  # 실제설치 - 계약
         pct = installed / planned * 100 if planned > 0 else 0
 
         if pct >= 100:
@@ -272,15 +257,10 @@ elif menu == "구역별 현황":
         else:
             icon = "⬜"
 
-        # 증감 표시 (실제설치 - 계약)
-        diff_str = f" | 계약대비: {diff:+}" if contract > 0 and installed > 0 else ""
-        label = f"{icon} {a['building']} | {area_name} — {installed}/{planned} ({pct:.0f}%){diff_str}"
+        label = f"{icon} {a['building']} | {area_name} — {installed}/{planned} ({pct:.0f}%)"
 
         with st.expander(label):
             st.progress(min(pct / 100, 1.0))
-
-            if contract > 0:
-                st.caption(f"계약: {contract} | 설치예정: {planned} | 실제설치: {installed} | 계약대비: {diff:+}")
 
             light_rows = []
             for light, light_planned_qty in a["lights"].items():
