@@ -107,7 +107,6 @@ def save_daily(dt, area, lights):
 # ========== 마스터 데이터 ==========
 MASTER_FILE = Path(__file__).parent / "area_light_data.json"
 
-@st.cache_data
 def load_master():
     with open(MASTER_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
